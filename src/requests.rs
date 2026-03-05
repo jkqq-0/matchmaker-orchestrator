@@ -33,7 +33,7 @@ pub async fn handle_single_upload(
     let service = ResumeService::new(state);
     
     task::spawn(async move {
-        service.process_and_update_resume(id, filename).await;
+        service.process_resume_upload(id, filename).await;
     });
     
     (StatusCode::ACCEPTED, Json(json!({"status": "processing", "message": "We're working on it!"})))

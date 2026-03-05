@@ -27,13 +27,53 @@ impl ResumeService {
         Self { state }
     }
 
-    pub async fn process_and_update_resume(&self, id: Uuid, filename: String) {
+    async fn update_resume_status(&self, id: Uuid, status: JobStatus, error_message: Option<String>) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE resumes SET status = $1, error_message = $2 WHERE id = $3",
+            status as JobStatus,
+            error_message,
+            id
+        )
+        .execute(&self.state.pool)
+        .await?;
+        Ok(())
+    }
+
+    async fn update_resume_upload_status(&self, id: Uuid, status: JobStatus, error_message: Option<String>) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE resume_uploads SET status = $1, error_message = $2 WHERE id = $3",
+            status as JobStatus,
+            error_message,
+            id
+        )
+        .execute(&self.state.pool)
+        .await?;
+        Ok(())
+    }
+
+    pub async fn process_resume_upload(&self, upload_id: Uuid, filename: String) {
         let _permit = self.state.semaphore.acquire().await.expect("Semaphore closed");
         
-        // Mark as processing
-        if let Err(e) = self.update_resume_status(id, JobStatus::Processing, None).await {
-            tracing::error!("Failed to update status to Processing for resume {}: {}", id, e);
+        // Mark upload as processing
+        if let Err(e) = self.update_resume_upload_status(upload_id, JobStatus::Processing, None).await {
+            tracing::error!("Failed to update status to Processing for resume upload {}: {}", upload_id, e);
         }
+
+        // Fetch details from resume_uploads
+        let upload_record = match sqlx::query!(
+            "SELECT user_id, term, zip_id FROM resume_uploads WHERE id = $1",
+            upload_id
+        )
+        .fetch_one(&self.state.pool)
+        .await {
+            Ok(r) => r,
+            Err(e) => {
+                let err_msg = format!("Failed to fetch resume upload record: {}", e);
+                tracing::error!("{}", err_msg);
+                let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
+                return;
+            }
+        };
 
         // Download
         let pdf_data = match self.state.s3_client.get_object()
@@ -46,63 +86,63 @@ impl ResumeService {
                         Ok(data) => data.into_bytes(),
                         Err(e) => {
                             let err_msg = format!("Failed to collect pdf body: {}", e);
-                            tracing::error!("{}, filename {}, id {}", err_msg, filename, id);
-                            if let Err(stat_e) = self.update_resume_status(id, JobStatus::Failed, Some(err_msg)).await {
-                                tracing::error!("Failed to update status to Failed for resume {}: {}", id, stat_e);
-                            }
+                            tracing::error!("{}, filename {}, upload_id {}", err_msg, filename, upload_id);
+                            let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
                             return;
                         }
                     }
                 }
                 Err(e) => {
                     let err_msg = format!("Failed to download pdf: {:#?}", e);
-                    tracing::error!("{}, filename {}, id {}", err_msg, filename, id);
-                    if let Err(stat_e) = self.update_resume_status(id, JobStatus::Failed, Some(err_msg)).await {
-                        tracing::error!("Failed to update status to Failed for resume {}: {}", id, stat_e);
-                    }
+                    tracing::error!("{}, filename {}, upload_id {}", err_msg, filename, upload_id);
+                    let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
                     return;
                 }
             };
 
+        // Create resume record with pending status
+        let resume_id = Uuid::new_v4();
+        if let Err(e) = sqlx::query!(
+            "INSERT INTO resumes (id, user_id, filename, term, zip_id, status) VALUES ($1, $2, $3, $4, $5, $6)",
+            resume_id,
+            upload_record.user_id,
+            filename,
+            upload_record.term,
+            upload_record.zip_id,
+            JobStatus::Pending as JobStatus
+        )
+        .execute(&self.state.pool)
+        .await {
+            let err_msg = format!("Failed to create resume record: {}", e);
+            tracing::error!("{}", err_msg);
+            let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
+            return;
+        }
+
         // Parse and process
-        match self.process_single_pdf(&pdf_data, &filename, id).await {
+        match self.process_single_pdf(&pdf_data, &filename, resume_id).await {
             Some((pdf_text, parsed_json)) => {
-                match self.update_resume_record(id, pdf_text, parsed_json).await {
+                match self.update_resume_record(resume_id, pdf_text, parsed_json).await {
                     Ok(_) => {
-                        tracing::info!("Resume record {} (filename: {}) updated successfully", id, filename);
-                        if let Err(e) = self.update_resume_status(id, JobStatus::Completed, None).await {
-                            tracing::error!("Failed to update status to Completed for resume {}: {}", id, e);
-                        }
+                        tracing::info!("Resume record {} (filename: {}) updated successfully", resume_id, filename);
+                        let _ = self.update_resume_status(resume_id, JobStatus::Completed, None).await;
+                        let _ = self.update_resume_upload_status(upload_id, JobStatus::Completed, None).await;
                     }
                     Err(e) => {
                         let err_msg = format!("Failed to update database record: {}", e);
-                        tracing::error!("{}, filename {}, id {}", err_msg, filename, id);
-                        if let Err(stat_e) = self.update_resume_status(id, JobStatus::Failed, Some(err_msg)).await {
-                            tracing::error!("Failed to update status to Failed for resume {}: {}", id, stat_e);
-                        }
+                        tracing::error!("{}, filename {}, resume_id {}", err_msg, filename, resume_id);
+                        let _ = self.update_resume_status(resume_id, JobStatus::Failed, Some(err_msg.clone())).await;
+                        let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
                     }
                 }
             }
             None => {
                  let err_msg = "PDF processing or LLM parsing failed".to_string();
-                 tracing::warn!("{}, filename {}, id {}", err_msg, filename, id);
-                 if let Err(e) = self.update_resume_status(id, JobStatus::Failed, Some(err_msg)).await {
-                    tracing::error!("Failed to update status to Failed for resume {}: {}", id, e);
-                 }
+                 tracing::warn!("{}, filename {}, resume_id {}", err_msg, filename, resume_id);
+                 let _ = self.update_resume_status(resume_id, JobStatus::Failed, Some(err_msg.clone())).await;
+                 let _ = self.update_resume_upload_status(upload_id, JobStatus::Failed, Some(err_msg)).await;
             }
         }
-    }
-
-    async fn update_resume_status(&self, id: Uuid, status: JobStatus, error_message: Option<String>) -> Result<(), sqlx::Error> {
-        sqlx::query!(
-            "UPDATE resumes SET status = $1, error_message = $2 WHERE id = $3",
-            status as JobStatus,
-            error_message,
-            id
-        )
-        .execute(&self.state.pool)
-        .await?;
-        Ok(())
     }
 
     pub async fn process_single_pdf(
