@@ -1,13 +1,13 @@
 {
   "db_name": "PostgreSQL",
-  "query": "UPDATE resumes SET status = $1, error_message = $2 WHERE id = $3",
+  "query": "UPDATE resume_uploads SET status = $1, error_message = $2 WHERE id = $3",
   "describe": {
     "columns": [],
     "parameters": {
       "Left": [
         {
           "Custom": {
-            "name": "job_status",
+            "name": "document_status",
             "kind": {
               "Enum": [
                 "pending",
@@ -24,5 +24,5 @@
     },
     "nullable": []
   },
-  "hash": "ba63a202b92660f535e626f97f99bcee87f1e4bcc5193cef577e518b7210b328"
+  "hash": "9208583929aaa1c5762b4e9bec94c0fae14d7b3fdc2c950238e65b14c786d3de"
 }

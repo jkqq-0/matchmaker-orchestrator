@@ -1,0 +1,40 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT user_id, term, zip_id, job_id FROM resume_uploads WHERE id = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "user_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 1,
+        "name": "term",
+        "type_info": "Text"
+      },
+      {
+        "ordinal": 2,
+        "name": "zip_id",
+        "type_info": "Uuid"
+      },
+      {
+        "ordinal": 3,
+        "name": "job_id",
+        "type_info": "Uuid"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      true,
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "002c79d20ca453bf605069940bf639703ad701da9049b697b71645f627761042"
+}

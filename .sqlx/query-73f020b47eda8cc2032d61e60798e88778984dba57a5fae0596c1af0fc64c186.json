@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE jobs SET rust_error = jsonb_set(rust_error, '{resumes}', rust_error->'resumes' || $1) WHERE id = $2",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Jsonb",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "73f020b47eda8cc2032d61e60798e88778984dba57a5fae0596c1af0fc64c186"
+}

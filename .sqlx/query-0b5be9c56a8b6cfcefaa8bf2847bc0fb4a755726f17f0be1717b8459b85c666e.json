@@ -1,12 +1,17 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT term FROM project_uploads WHERE id = $1",
+  "query": "SELECT term, job_id FROM project_uploads WHERE id = $1",
   "describe": {
     "columns": [
       {
         "ordinal": 0,
         "name": "term",
         "type_info": "Text"
+      },
+      {
+        "ordinal": 1,
+        "name": "job_id",
+        "type_info": "Uuid"
       }
     ],
     "parameters": {
@@ -15,8 +20,9 @@
       ]
     },
     "nullable": [
+      true,
       true
     ]
   },
-  "hash": "db9777cd1cb2d644388d0a14187964b3a9a98fb7ea78b9b209b71ea66f904949"
+  "hash": "0b5be9c56a8b6cfcefaa8bf2847bc0fb4a755726f17f0be1717b8459b85c666e"
 }
