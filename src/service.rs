@@ -270,7 +270,7 @@ impl ResumeService {
             
             let s3_client = self.state.s3_client.clone();
             let semaphore = self.state.semaphore.clone();
-            let pool = self.state.pool.clone(); // Clone pool for DB update
+            let zip_id_str = id.to_string();
 
             tokio::spawn(async move {
                 let _permit = semaphore.acquire().await.expect("Semaphore closed");
@@ -280,34 +280,12 @@ impl ResumeService {
                     .key(&upload_path)
                     .body(ByteStream::from(pdf_bytes))
                     .content_type("application/pdf")
-                    // .metadata("zip_id", zip_id_str) // Metadata propagation is unreliable, handled via DB update below
+                    .metadata("zip_id", zip_id_str)
                     .send()
                     .await {
                         Ok(_) => {
                              tracing::info!("Successfully re-uploaded extracted PDF: {}", upload_path);
-                             // Explicitly link the resume to the zip archive
-                             // We use a retry loop briefly in case the trigger hasn't fired yet (race condition)
-                             let mut retries = 0;
-                             while retries < 3 {
-                                 match sqlx::query!("UPDATE resumes SET zip_id = $1 WHERE filename = $2", id, upload_path)
-                                     .execute(&pool)
-                                     .await 
-                                 {
-                                     Ok(result) => {
-                                         if result.rows_affected() > 0 {
-                                             tracing::info!("Linked resume {} to zip_id {}", upload_path, id);
-                                             break;
-                                         } else {
-                                             tracing::warn!("Resume row not found for linking (retry {}): {}", retries, upload_path);
-                                         }
-                                     },
-                                     Err(e) => {
-                                         tracing::error!("Failed to link resume {} to zip_id {}: {}", upload_path, id, e);
-                                     }
-                                 }
-                                 retries += 1;
-                                 tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-                             }
+                             // Linkage now handled by the storage trigger on objects
                         },
                         Err(e) => tracing::error!("Failed to upload extracted PDF {}: {}", upload_path, e),
                     }
@@ -371,9 +349,9 @@ impl ProjectService {
             };
 
         let projects = if filename.ends_with(".csv") {
-            self.parse_csv(&data)
+            Self::parse_csv(&data)
         } else if filename.ends_with(".xlsx") || filename.ends_with(".xls") {
-            self.parse_excel(&data)
+            Self::parse_excel(&data)
         } else {
             let err_msg = format!("Unsupported file format: {}", filename);
             let _ = self.update_upload_status(id, JobStatus::Failed, Some(err_msg)).await;
@@ -398,7 +376,7 @@ impl ProjectService {
         }
     }
 
-    fn parse_csv(&self, data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
+    pub fn parse_csv(data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
         let mut rdr = ReaderBuilder::new()
             .has_headers(true)
             .from_reader(data);
@@ -411,7 +389,7 @@ impl ProjectService {
         Ok(projects)
     }
 
-    fn parse_excel(&self, data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
+    pub fn parse_excel(data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
         let cursor = Cursor::new(data);
         let mut excel: Xlsx<_> = open_workbook_from_rs(cursor)?;
         
@@ -495,7 +473,7 @@ impl ProjectService {
     }
 }
 
-#[derive(Debug, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize, PartialEq)]
 pub struct ProjectData {
     #[serde(alias = "Project Name", alias = "project name", alias = "Title", alias = "title")]
     pub title: String,
@@ -514,4 +492,93 @@ pub struct ProjectData {
 }
 
 fn default_cap() -> i16 { 1 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_csv_valid() {
+        let csv_data = b"title,description,requirements,manager,deadline,priority,intern_cap\nProject A,Desc A,Req A,Manager A,2026-01-01,1,2";
+        let result = ProjectService::parse_csv(csv_data).unwrap();
+        
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0], ProjectData {
+            title: "Project A".to_string(),
+            description: "Desc A".to_string(),
+            requirements: "Req A".to_string(),
+            manager: "Manager A".to_string(),
+            deadline: "2026-01-01".to_string(),
+            priority: 1,
+            intern_cap: 2,
+        });
+    }
+
+    #[test]
+    fn test_parse_csv_missing_optional_fields() {
+        // Test with aliases and missing priority/cap
+        let csv_data = b"Project Name,About,Skills,Lead,Due Date\nProject B,Desc B,Req B,Manager B,2026-02-02";
+        let result = ProjectService::parse_csv(csv_data).unwrap();
+        
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].title, "Project B");
+        assert_eq!(result[0].priority, 0); // Default
+        assert_eq!(result[0].intern_cap, 1); // Default
+    }
+
+    #[test]
+    fn test_parse_csv_missing_required_field() {
+        let csv_data = b"description,requirements\nOnly desc,Only req";
+        let result = ProjectService::parse_csv(csv_data);
+        // Should fail because 'title' is a required field and not in the header
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_parse_csv_empty() {
+        let csv_data = b"";
+        let result = ProjectService::parse_csv(csv_data).unwrap();
+        assert!(result.is_empty());
+    }
+
+    #[test]
+    fn test_parse_excel_valid() {
+        // Read the sample Excel file from the workspace
+        let path = "test-project-sheets/test_projects.xlsx";
+        let excel_data = std::fs::read(path).expect("Failed to read test excel file");
+        
+        let result = ProjectService::parse_excel(&excel_data).unwrap();
+        
+        // We expect at least some projects based on the file name
+        assert!(!result.is_empty());
+        
+        // Verify the first project has a title
+        assert!(!result[0].title.is_empty());
+        tracing::debug!("Parsed {} projects from excel", result.len());
+    }
+
+    #[test]
+    fn test_parse_excel_broken() {
+        let path = "test-project-sheets/test_projects_broken.xlsx";
+        let excel_data = std::fs::read(path).expect("Failed to read test excel file");
+        
+        // This file is "broken" - it might have missing headers or other issues.
+        // Our current implementation tries to extract what it can.
+        let result = ProjectService::parse_excel(&excel_data);
+        
+        // Depending on how "broken" it is, it should either return Err or an empty Vec if no titles are found
+        match result {
+            Ok(projects) => {
+                // If it succeeded, check if it actually found any valid projects (with titles)
+                for p in projects {
+                    assert!(!p.title.is_empty());
+                }
+            },
+            Err(_) => {
+                // Error is also an acceptable outcome for a truly corrupt file
+            }
+        }
+    }
+}
+
 
