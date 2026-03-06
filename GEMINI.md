@@ -15,79 +15,56 @@ This is a Rust-based backend service built with **Axum** designed to orchestrate
 
 ## Architecture
 *   **Framework:** Axum (Web Server)
+*   **Library First:** Core logic resides in `lib.rs`, allowing binary and test suite to share state and types.
 *   **Runtime:** Tokio (Async)
 *   **Database:** PostgreSQL (via `sqlx`)
-*   **Storage:** Supabase Storage (S3-compatible via `aws-sdk-s3`)
-*   **AI Integration:** OpenAI API
-*   **Error Handling:** Status and error messages persisted to DB columns.
+*   **Storage Abstraction:** Uses `StorageProvider` trait to allow switching between real S3 and in-memory Mocks.
+*   **AI Integration:** OpenAI API with configurable endpoints for testing.
+*   **Job Tracking:** Automatic "Ready" state transitions and JSONB error aggregation in the `jobs` table.
 
 ## Key Files
-*   `src/main.rs`: Entry point. Initializes `AppState` (shared DB pool, HTTP client, configuration, Semaphore) and sets up Axum routes.
-*   `src/service.rs`: **Core Business Logic.** Contains the `ResumeService` struct which handles PDF extraction, LLM orchestration, ZIP processing, and DB updates.
-*   `src/requests.rs`: HTTP Route handlers (`handle_single_upload`, `handle_batch_upload`). These are lightweight wrappers that delegate to `ResumeService`.
-*   `src/requests/openai.rs`: Helper functions for communicating with the OpenAI API.
-*   `src/resume_schema.json`: Defines the expected JSON structure for the parsed resume data.
-*   `Cargo.toml`: Project dependencies.
+*   `src/main.rs`: Entry point. Initializes `AppState` and launches the web server.
+*   `src/lib.rs`: Library root. Defines `AppState` and modules.
+*   `src/service.rs`: **Core Business Logic.** Handles PDF extraction, LLM orchestration, ZIP processing, and DB updates.
+*   `src/storage.rs`: S3 and Mock storage implementations.
+*   `src/config.rs`: Config parsing and S3 URL generation logic.
+*   `tests/`: Comprehensive test suite (Integration and Logic).
+*   `.github/workflows/ci.yml`: GitHub Actions configuration.
 
-## Building and Running
+## Testing & Validation
+The project uses a three-tier testing approach:
+1.  **Unit Tests**: In-file tests for pure logic (parsers, config).
+2.  **Logic Tests**: `tests/logic_tests.rs` for verifying complex SQL operations and state transitions.
+3.  **Integration Tests**: `tests/integration_tests.rs` for full webhook-to-database flows using `wiremock` and `MockStorageProvider`.
 
-### Prerequisites
-*   Rust (latest stable)
-*   PostgreSQL database (or Supabase project)
-*   OpenAI API Key
-
-### Environment Variables
-The application requires a `.env` file or system environment variables. For cloud development, use the **Supabase Session Pooler** URL to ensure compatibility without direct IPv4 access.
-
-```env
-DATABASE_URL=postgres://postgres.[PROJ_REF]:[PASS]@aws-1-us-east-2.pooler.supabase.com:5432/postgres
-SUPABASE_ENDPOINT=https://your-project.supabase.co
-SERVICE_KEY=your-supabase-service-role-key
-OPENAI_API_KEY=your-openai-api-key
-S3_ACCESS_KEY=your-supabase-s3-access-key
-S3_SECRET_KEY=your-supabase-s3-secret-key
-MAX_CONCURRENT_TASKS=10
+**Run Tests:**
+```bash
+cargo test
 ```
 
-### Storage Configuration
-The service expects the following buckets to exist in Supabase Storage:
-- `resumes`: For individual PDF resume files.
-- `zip-archives`: For batch ZIP uploads.
-
-### Local Development with Cloud
+## Local Development with Cloud
 The project is currently linked to the **InternProjectMatchmaker** cloud project (`pkckwgszwgrvxwwdofcj`). 
 
 *   **MCP Server:** The Supabase MCP server is configured to interact directly with this cloud environment.
+*   **SQLx Offline:** Metadata in `.sqlx/` allows compilation without a live DB connection. Update via `cargo sqlx prepare -- --all-targets`.
 *   **Webhooks:** Use a tool like **ngrok** to expose your local port (default `3000`) so that Supabase Cloud Webhooks can reach your local orchestrator.
-
-### Commands
-*   **Run Development Server:**
-    ```bash
-    cargo run
-    ```
-    The server listens on `0.0.0.0:3000`.
-
-*   **Build for Production:**
-    ```bash
-    cargo build --release
-    ```
 
 ## API Endpoints
 
-### `POST /scrape/individual`
+### `POST /ingest/interns/individual`
 Triggers processing for a single uploaded PDF.
 *   **Payload:** JSON containing the file record (ID and filename).
 *   **Behavior:** Spawns a background task via `ResumeService`. Returns HTTP 202 Accepted immediately.
 
-### `POST /ingest/resumes/batch`
+### `POST /ingest/interns/batch`
 Triggers processing for a ZIP archive of resumes.
 *   **Payload:** JSON containing the file record.
-*   **Behavior:** Spawns a background task via `ResumeService` to extract the ZIP and re-upload individual PDFs. Returns HTTP 202 Accepted.
+*   **Behavior:** Spawns a background task via `ResumeService` to extract the ZIP and re-upload individual PDFs with `job_id` and `zip_id` metadata. Returns HTTP 202 Accepted.
 
 ### `POST /ingest/projects`
 Triggers processing for a project spreadsheet (CSV or XLSX).
 *   **Payload:** JSON containing the file record.
-*   **Behavior:** Spawns a background task via `ProjectService` to parse rows and insert into the `projects` table. Returns HTTP 202 Accepted.
+*   **Behavior:** Spawns a background task via `ProjectService` to parse rows, insert into the `projects` table, and check for job readiness. Returns HTTP 202 Accepted.
 
 ## Development Conventions
 *   **State Management:** All shared state is held in `AppState` and injected via Axum's `State` extractor.

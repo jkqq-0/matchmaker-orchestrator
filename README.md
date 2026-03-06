@@ -23,11 +23,16 @@ A Rust-based backend service built with **Axum** designed to orchestrate the pro
 ## Project Structure
 
 *   `src/main.rs`: Entry point. Initializes application state and sets up routes.
+*   `src/lib.rs`: Library root. Exports modules and defines shared `AppState`.
 *   `src/service.rs`: **Core Business Logic.** Handles PDF extraction, LLM orchestration, ZIP processing, and DB updates.
-*   `src/requests.rs`: HTTP route handlers.
+*   `src/storage.rs`: Abstraction layer for storage (S3 and Mock implementations).
+*   `src/config.rs`: Pure logic for configuration parsing and URL construction.
 *   `src/auth.rs`: JWT authentication middleware for protecting endpoints.
 *   `src/requests/openai.rs`: OpenAI API integration helpers.
-*   `src/resume_schema.json`: JSON schema for the parsed resume data.
+*   `tests/`: Integration and logic tests.
+    *   `integration_tests.rs`: End-to-end webhook flow verification.
+    *   `logic_tests.rs`: Deep-dive tests for SQL state machine and JSONB persistence.
+    *   `schema.sql`: Database schema used for CI and local testing.
 
 ## Getting Started
 
@@ -46,11 +51,29 @@ DATABASE_URL=postgres://postgres.[PROJ_REF]:[PASS]@aws-1-us-east-2.pooler.supaba
 SUPABASE_ENDPOINT=https://your-project.supabase.co
 SERVICE_KEY=your-supabase-service-role-key
 OPENAI_API_KEY=your-openai-api-key
-S3_ACCESS_KEY=your-supabase-s3-access-key
-S3_SECRET_KEY=your-supabase-s3-secret-key
-SUPABASE_JWT_SECRET=your-jwt-secret
 MAX_CONCURRENT_TASKS=10
 ```
+
+### Testing
+
+The project includes a comprehensive testing suite.
+
+```bash
+# Run all tests (Unit, Logic, and Integration)
+cargo test
+
+# Run tests with detailed tracing output
+cargo test -- --nocapture
+```
+
+Note: Integration tests require a `DATABASE_URL` to be set in your `.env` file. They use a "poll-and-verify" pattern to check background task completion.
+
+### CI/CD
+
+A GitHub Actions pipeline is configured in `.github/workflows/ci.yml`. It automatically:
+1. Spins up a Postgres service.
+2. Initializes the schema using `tests/schema.sql`.
+3. Runs the full test suite on every push to `main` or `dev`.
 
 ### Running the Application
 
