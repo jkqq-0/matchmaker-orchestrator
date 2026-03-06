@@ -216,7 +216,7 @@ async fn test_resume_upload_flow() {
         .with_state(app_state);
 
     // 2. Mock PDF data
-    let pdf_path = "test_resumes (Archive.zip)/Alex_Rivera_CV.pdf";
+    let pdf_path = "archive.zip-resumes/Alex_Rivera_CV.pdf";
     let pdf_bytes = std::fs::read(pdf_path).expect("Failed to read test PDF");
     env.storage
         .put_object("resumes", "Alex_Rivera_CV.pdf", pdf_bytes, None)
