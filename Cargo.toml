@@ -27,8 +27,13 @@ axum-extra = { version = "0.12.5", features = ["typed-header"] }
 csv = "1.4.0"
 calamine = "0.32.0"
 url = "2.5.8"
+async-trait = "0.1.89"
 
 # The profile that 'dist' will build with
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[dev-dependencies]
+tower = { version = "0.5.3", features = ["util"] }
+wiremock = "0.6.5"

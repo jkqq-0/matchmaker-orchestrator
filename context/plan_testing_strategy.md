@@ -42,15 +42,18 @@ Building on existing scripts and `plan_trust_test.md`:
 
 ## 2. Implementation Roadmap
 
-### Phase 1: Unit Test Foundation (In Progress)
+### Phase 1: Unit Test Foundation (Complete)
 - [x] Refactor `ProjectService` parsers to associated functions.
 - [x] Add unit tests for CSV parsing.
-- [ ] Add unit tests for Excel parsing (requires mocking `Xlsx` cursor).
+- [x] Add unit tests for Excel parsing (with validation of specific fields).
 
-### Phase 2: Mocking & Integration
-- [ ] Implement a `MockS3` wrapper to avoid real downloads during tests.
-- [ ] Set up `wiremock` for OpenAI in the test suite.
-- [ ] Create a `tests/integration_tests.rs` file for end-to-end flow verification.
+### Phase 2: Mocking & Integration (Complete)
+- [x] Implement a `StorageProvider` trait and `MockStorageProvider` for S3 abstraction.
+- [x] Set up `wiremock` for OpenAI in the test suite.
+- [x] Create a `tests/integration_tests.rs` file for end-to-end flow verification.
+    - [x] `test_project_upload_flow` (CSV/Excel -> DB)
+    - [x] `test_resume_upload_flow` (PDF -> Mock LLM -> DB)
+    - [x] `test_zip_upload_flow` (ZIP -> Extraction -> Re-upload)
 
 ### Phase 3: Automation
 - [ ] Integrate `measure_wrongness.py` logic into a Rust-based benchmarker.

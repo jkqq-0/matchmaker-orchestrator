@@ -1,16 +1,16 @@
+use crate::AppState;
 use axum::{
     body::Body,
-    extract::{State, Request},
-    http::{StatusCode},
+    extract::{Request, State},
+    http::StatusCode,
     middleware::Next,
     response::Response,
 };
-use axum_extra::headers::{authorization::Bearer, Authorization, HeaderMapExt};
-use jsonwebtoken::{decode, DecodingKey, Validation, Algorithm};
+use axum_extra::headers::{Authorization, HeaderMapExt, authorization::Bearer};
+use jsonwebtoken::{Algorithm, DecodingKey, Validation, decode};
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 use std::env;
-use crate::AppState;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
@@ -43,7 +43,8 @@ pub async fn auth(
     req: Request<Body>,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    let token = req.headers()
+    let token = req
+        .headers()
         .typed_try_get::<Authorization<Bearer>>()
         .map_err(|_| StatusCode::UNAUTHORIZED)?
         .ok_or(StatusCode::UNAUTHORIZED)?
@@ -52,12 +53,16 @@ pub async fn auth(
 
     let secret = &state.jwt_secret;
     let validation = Validation::new(Algorithm::HS256);
-    
-    let _ = decode::<Claims>(
+
+    match decode::<Claims>(
         &token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &validation,
-    ).map_err(|_| StatusCode::UNAUTHORIZED)?;
-
-    Ok(next.run(req).await)
+    ) {
+        Ok(_) => Ok(next.run(req).await),
+        Err(e) => {
+            tracing::warn!("JWT validation failed: {}", e);
+            Err(StatusCode::UNAUTHORIZED)
+        }
+    }
 }

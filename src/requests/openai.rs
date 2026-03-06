@@ -1,34 +1,32 @@
+use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use anyhow::{Context, Result};
 
 #[derive(Serialize)]
 pub struct LLMRequest {
     model: String,
     messages: [Message; 2],
-    response_format: ResponseFormat
+    response_format: ResponseFormat,
 }
 
 #[derive(Deserialize, Serialize, Debug)]
 pub struct Message {
     pub role: String,
-    pub content: String
+    pub content: String,
 }
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type")] // This tells serde to use "type": "json_schema"
 pub enum ResponseFormat {
     #[serde(rename = "json_schema")]
-    JsonSchema {
-        json_schema: JsonSchemaDefinition,
-    }
+    JsonSchema { json_schema: JsonSchemaDefinition },
 }
 
 #[derive(Serialize, Debug)]
 pub struct JsonSchemaDefinition {
     pub name: String,
     pub strict: bool,
-    pub schema: Value
+    pub schema: Value,
 }
 #[derive(Deserialize, Debug)]
 pub struct ChatCompletionResponse {
@@ -46,22 +44,24 @@ pub async fn generate_structure_from_pdf(
     resume_text: &str,
     client: &reqwest::Client,
     api_key: &str,
-    schema: &Value
+    endpoint: &str,
+    schema: &Value,
 ) -> Result<ChatCompletionResponse> {
     let system_prompt = "You are a resume conversion assistant. Extract information from the user's resume text and format it into the given structure.".to_string();
     let user_prompt = resume_text.to_string();
-    
+
     let request = LLMRequest {
         model: OPENAI_MODEL.to_string(),
         messages: [
             Message {
                 role: "system".to_string(),
-                content: system_prompt
-        },
+                content: system_prompt,
+            },
             Message {
                 role: "user".to_string(),
-                content: user_prompt
-        }],
+                content: user_prompt,
+            },
+        ],
         response_format: ResponseFormat::JsonSchema {
             json_schema: JsonSchemaDefinition {
                 name: "resume_data_structuring".to_string(),
@@ -71,7 +71,8 @@ pub async fn generate_structure_from_pdf(
         },
     };
 
-    client.post("https://api.openai.com/v1/chat/completions")
+    client
+        .post(endpoint)
         .bearer_auth(api_key)
         .json(&request)
         .send()
