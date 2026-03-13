@@ -28,10 +28,8 @@ pub async fn get_jwt_secret(pool: &PgPool) -> anyhow::Result<String> {
     .fetch_optional(pool)
     .await?;
 
-    if let Some(record) = row {
-        if let Some(s) = record.decrypted_secret {
-            return Ok(s);
-        }
+    if let Some(s) = row.and_then(|r| r.decrypted_secret) {
+        return Ok(s);
     }
 
     // Fallback

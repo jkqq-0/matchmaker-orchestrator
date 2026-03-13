@@ -77,13 +77,19 @@ impl StorageProvider for S3StorageProvider {
     }
 }
 
+type MockStorageMap = std::collections::HashMap<
+    String,
+    (Vec<u8>, Option<std::collections::HashMap<String, String>>),
+>;
+
 pub struct MockStorageProvider {
-    pub objects: std::sync::Mutex<
-        std::collections::HashMap<
-            String,
-            (Vec<u8>, Option<std::collections::HashMap<String, String>>),
-        >,
-    >,
+    pub objects: std::sync::Mutex<MockStorageMap>,
+}
+
+impl Default for MockStorageProvider {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl MockStorageProvider {

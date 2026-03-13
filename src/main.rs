@@ -73,7 +73,7 @@ async fn main() {
     let storage = Arc::new(S3StorageProvider::new(s3_client));
 
     let pool = PgPoolOptions::new()
-        .max_connections(5)
+        .max_connections((max_concurrent_tasks + 5) as u32)
         .connect(&db_url)
         .await
         .unwrap();

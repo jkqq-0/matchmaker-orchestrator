@@ -772,23 +772,29 @@ impl ProjectService {
         projects: Vec<ProjectData>,
         term: Option<String>,
     ) -> Result<(), sqlx::Error> {
-        for p in projects {
-            sqlx::query!(
-                "INSERT INTO projects (upload_id, title, description, requirements, manager, deadline, priority, intern_cap, term)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
-                upload_id,
-                p.title,
-                p.description,
-                p.requirements,
-                p.manager,
-                p.deadline,
-                p.priority,
-                p.intern_cap,
-                term
-            )
-            .execute(&self.state.pool)
-            .await?;
+        if projects.is_empty() {
+            return Ok(());
         }
+
+        let mut query_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
+            "INSERT INTO projects (upload_id, title, description, requirements, manager, deadline, priority, intern_cap, term) "
+        );
+
+        query_builder.push_values(projects, |mut b, p| {
+            b.push_bind(upload_id)
+                .push_bind(p.title)
+                .push_bind(p.description)
+                .push_bind(p.requirements)
+                .push_bind(p.manager)
+                .push_bind(p.deadline)
+                .push_bind(p.priority)
+                .push_bind(p.intern_cap)
+                .push_bind(term.clone());
+        });
+
+        let query = query_builder.build();
+        query.execute(&self.state.pool).await?;
+
         Ok(())
     }
 }

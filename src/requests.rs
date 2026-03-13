@@ -27,7 +27,7 @@ pub async fn handle_single_upload(
     Json(payload): Json<WebhookPayload>,
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
-    let id = payload.record.id.clone();
+    let id = payload.record.id;
     tracing::info!("scrape handler accessed");
 
     let service = ResumeService::new(state);
@@ -47,7 +47,7 @@ pub async fn handle_batch_upload(
     Json(payload): Json<WebhookPayload>,
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
-    let id = payload.record.id.clone();
+    let id = payload.record.id;
     tracing::info!("batch upload handler accessed");
 
     let service = ResumeService::new(state);
@@ -67,7 +67,7 @@ pub async fn handle_project_upload(
     Json(payload): Json<WebhookPayload>,
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
-    let id = payload.record.id.clone();
+    let id = payload.record.id;
     tracing::info!("project upload handler accessed");
 
     let service = ProjectService::new(state);

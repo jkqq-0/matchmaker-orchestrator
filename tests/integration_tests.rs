@@ -382,13 +382,13 @@ async fn test_zip_filtering_chaos() {
         tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
     }
 
-    let objects = env.storage.objects.lock().unwrap();
-    // Should have valid.pdf AND the nested one (it currently doesn't filter nested, just non-pdfs)
-    assert!(objects.contains_key("resumes/chaos.zip_valid.pdf"));
-    assert!(objects.contains_key("resumes/chaos.zip_nested/folder.pdf"));
-    // Should NOT have the text file
-    assert!(!objects.contains_key("resumes/chaos.zip_ignore_me.txt"));
-
-    drop(objects);
+    {
+        let objects = env.storage.objects.lock().unwrap();
+        // Should have valid.pdf AND the nested one (it currently doesn't filter nested, just non-pdfs)
+        assert!(objects.contains_key("resumes/chaos.zip_valid.pdf"));
+        assert!(objects.contains_key("resumes/chaos.zip_nested/folder.pdf"));
+        // Should NOT have the text file
+        assert!(!objects.contains_key("resumes/chaos.zip_ignore_me.txt"));
+    }
     sqlx::query!("DELETE FROM zip_archives WHERE id = $1", zip_id).execute(&env.pool).await.unwrap();
 }
