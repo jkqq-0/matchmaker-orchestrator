@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO resume_uploads (id, filename, status) VALUES ($1, $2, 'pending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "f761c49f4e0454cd12399bb6c60ee4d27f9260b40585bd93a53bb6e190b51b72"
+}

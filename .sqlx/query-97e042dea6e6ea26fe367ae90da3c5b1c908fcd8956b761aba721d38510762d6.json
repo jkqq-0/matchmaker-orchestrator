@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO project_uploads (id, filename, status) VALUES ($1, $2, 'pending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "97e042dea6e6ea26fe367ae90da3c5b1c908fcd8956b761aba721d38510762d6"
+}

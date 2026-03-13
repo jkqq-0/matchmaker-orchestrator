@@ -1,0 +1,15 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO zip_archives (id, filename, status) VALUES ($1, $2, 'pending')",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        "Uuid",
+        "Text"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "d6629ae46a1b8402c0ad87282b4ec1b43f40bfa905e965776d7a6d64c99b976f"
+}
