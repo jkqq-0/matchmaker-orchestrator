@@ -71,3 +71,6 @@ Triggers processing for a project spreadsheet (CSV or XLSX).
 *   **Concurrency:** Uses `tokio::spawn` for background tasks, throttled by a `tokio::sync::Semaphore` (limit defined by `MAX_CONCURRENT_TASKS`) to prevent resource exhaustion.
 *   **Database:** Uses `sqlx` with compile-time checked queries (mostly).
 *   **Logging:** Uses structured logging via `tracing`. Failures in background tasks are logged as errors.
+
+## IDE Preference
+- The user's preferred IDE is VS Code. Assume they are using VS Code for all IDE specific configurations unless explicitly stated otherwise.
