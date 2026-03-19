@@ -10,3 +10,7 @@
 .DS_Store
 ai-trust-testing/
 /scripts/
+
+# Supabase
+supabase/.temp/
+supabase/.branches/
