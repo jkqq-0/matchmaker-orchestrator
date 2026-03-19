@@ -43,6 +43,9 @@ const TEST_PDF_KEY: &str = "load_test_resume.pdf";
 // All N test batch uploads share one ZIP key in MockStorage.
 const TEST_ZIP_KEY: &str = "load_test_archive.zip";
 
+// All N test projects uploads share one CSV key in MockStorage.
+const TEST_CSV_KEY: &str = "load_test_projects.csv";
+
 // Minimal canned OpenAI response — fast, deterministic, always valid JSON.
 const FAKE_OPENAI_RESPONSE: &str = r#"{
   "choices": [{
@@ -57,6 +60,7 @@ const FAKE_OPENAI_RESPONSE: &str = r#"{
 enum TestMode {
     Individual,
     Batch,
+    Projects,
 }
 
 // ---------------------------------------------------------------------------
@@ -85,7 +89,8 @@ struct Config {
     let mode = match mode_str.to_lowercase().as_str() {
         "batch" => TestMode::Batch,
         "individual" => TestMode::Individual,
-        _ => panic!("LOAD_TEST_MODE must be 'individual' or 'batch'"),
+        "projects" => TestMode::Projects,
+        _ => panic!("LOAD_TEST_MODE must be 'individual', 'batch', or 'projects'"),
     };
 
     Config {
@@ -212,6 +217,20 @@ async fn main() {
                 .expect("Failed to seed mock storage");
             println!("Mock storage seeded with test ZIP ({}).", TEST_ZIP_KEY);
         }
+        TestMode::Projects => {
+            let csv_bytes = std::fs::read("test-project-sheets/twenty_test_projects.csv")
+                .expect("Test CSV not found. Run from the project root directory.");
+            storage
+                .put_object(
+                    "project-spreadsheets",
+                    TEST_CSV_KEY,
+                    csv_bytes,
+                    None::<std::collections::HashMap<String, String>>,
+                )
+                .await
+                .expect("Failed to seed mock storage");
+            println!("Mock storage seeded with test CSV ({}).", TEST_CSV_KEY);
+        }
     }
 
     // ── 3. Wiremock OpenAI Stub ──────────────────────────────────────────────
@@ -251,6 +270,7 @@ async fn main() {
     let app = Router::new()
         .route("/ingest/interns/individual", post(handle_single_upload))
         .route("/ingest/interns/batch", post(matchmaker_orchestrator::requests::handle_batch_upload))
+        .route("/ingest/projects", post(matchmaker_orchestrator::requests::handle_project_upload))
         .route_layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             auth::auth,
@@ -272,10 +292,12 @@ async fn main() {
     let table_name = match config.mode {
         TestMode::Individual => "resume_uploads",
         TestMode::Batch => "zip_archives",
+        TestMode::Projects => "project_uploads",
     };
     let test_file_key = match config.mode {
         TestMode::Individual => TEST_PDF_KEY,
         TestMode::Batch => TEST_ZIP_KEY,
+        TestMode::Projects => TEST_CSV_KEY,
     };
 
     print!(
@@ -305,6 +327,7 @@ async fn main() {
     let endpoint_path = match config.mode {
         TestMode::Individual => "/ingest/interns/individual",
         TestMode::Batch => "/ingest/interns/batch",
+        TestMode::Projects => "/ingest/projects",
     };
     let endpoint = format!("http://{}{}", server_addr, endpoint_path);
 
@@ -526,6 +549,19 @@ async fn main() {
                 .execute(&pool)
                 .await
                 .expect("Cleanup failed: zip_archives");
+        }
+        TestMode::Projects => {
+            sqlx::query("DELETE FROM projects WHERE upload_id = ANY($1)")
+                .bind(&upload_ids)
+                .execute(&pool)
+                .await
+                .expect("Cleanup failed: projects");
+
+            sqlx::query("DELETE FROM project_uploads WHERE id = ANY($1)")
+                .bind(&upload_ids)
+                .execute(&pool)
+                .await
+                .expect("Cleanup failed: project_uploads");
         }
     }
 
