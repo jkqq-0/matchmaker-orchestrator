@@ -1,0 +1,21 @@
+Project Name,Description,Requirements,Manager,Due Date,Priority,Interns
+Cloud Migration,Migrating legacy on-prem services to Azure,Rust; SQL; Azure,John Doe,2026-08-15,1,3
+Fleet Telematics UI,Dashboard for real-time truck tracking,React; TypeScript; Material UI,Jane Smith,2026-09-01,2,2
+Predictive Maintenance AI,ML model to predict engine failures,Python; PyTorch; Data Science,Bob Wilson,2026-12-01,1,1
+Supply Chain Optimizer,Refining logistics routing algorithms,Algorithms; Java; Optimization,Alice Brown,2026-10-30,3,4
+Secure Auth Service,OAuth2 and OIDC provider for internal tools,Go; Redis; Cybersecurity,Michael Chen,2026-07-20,1,2
+AR Warehouse Nav,Augmented reality for forklift operators,C#; Unity; Computer Vision,Sarah Jenkins,2026-11-15,2,3
+Genomic Data Pipeline,Processing large-scale sequencing data,Python; Apache Spark; Bioinformatics,Chloe Chen,2026-09-30,3,2
+Autonomous Rover Firmware,Low-level control for indoor robotics,C; C++; RTOS,Marcus Thorne,2026-08-01,1,2
+HFT Simulator,High-frequency trading engine testing suite,Java; Kafka; Multithreading,Isabella Conti,2026-12-15,2,4
+Satellite Telemetry Monitor,Dashboard for orbital health tracking,TypeScript; Node.js; AWS,Tess Abernathy,2026-10-15,1,1
+Stealth Scanner,Network vulnerability mapping tool,Python; Go; Wireshark,Finn O'Reilly,2026-07-01,2,2
+Mobile Health Tracker,App for patient vital sign monitoring,React Native; Firebase; iOS,Maya Okafor,2026-09-10,3,3
+GPU Shader Optimizer,Optimizing Vulkan shader performance,C++; CUDA; Vulkan,Samir Al-Fayed,2026-11-01,1,2
+Energy Distro Logic,Smart grid load balancing algorithms,Python; MATLAB; Power Systems,Benjamin Moore,2026-08-30,2,3
+Accessibility Auditor,Automated web accessibility scanner,JavaScript; HTML; WCAG Standards,Zoe Wang,2026-10-05,3,2
+Distributed Key-Value Store,Raft-based storage system for metadata,Rust; Distributed Systems; Linux,Jordan Smith,2026-12-20,1,2
+NLP Tutor Bot,Adaptive AI for language learning,Python; Jax; NLP,Olivia Smith,2026-09-25,2,1
+Infrastructure as Code Migration,Terraforming existing cloud resources,Terraform; AWS; DevOps,Ivan Petrov,2026-07-15,1,2
+Avionics Sensor Test Suite,Automated testing for Starship sensors,C++; Python; LabVIEW,Noah Jenkins,2026-11-20,2,2
+Chromium Extension Manager,Enhanced extension security controls,C++; JavaScript; Git,Lily Nguyen,2026-08-10,3,2
