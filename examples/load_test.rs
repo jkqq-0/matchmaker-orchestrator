@@ -37,9 +37,11 @@ use uuid::Uuid;
 use wiremock::matchers::{method, path};
 use wiremock::{Mock, MockServer, ResponseTemplate};
 
-// All N test uploads share one PDF key in MockStorage. The mock just returns
-// the same bytes for every get_object call, so this is fine.
+// All N test individual uploads share one PDF key in MockStorage.
 const TEST_PDF_KEY: &str = "load_test_resume.pdf";
+
+// All N test batch uploads share one ZIP key in MockStorage.
+const TEST_ZIP_KEY: &str = "load_test_archive.zip";
 
 // Minimal canned OpenAI response — fast, deterministic, always valid JSON.
 const FAKE_OPENAI_RESPONSE: &str = r#"{
@@ -51,12 +53,19 @@ const FAKE_OPENAI_RESPONSE: &str = r#"{
   }]
 }"#;
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum TestMode {
+    Individual,
+    Batch,
+}
+
 // ---------------------------------------------------------------------------
 // Config
 // ---------------------------------------------------------------------------
 
 struct Config {
     database_url: String,
+    mode: TestMode,
     /// Total number of HTTP requests to fire.
     total_requests: usize,
     /// Max in-flight HTTP requests at any time (controls client-side concurrency).
@@ -69,13 +78,22 @@ struct Config {
     jwt_secret: String,
 }
 
-fn parse_config() -> Config {
+    fn parse_config() -> Config {
     dotenvy::dotenv().ok(); // Load .env if present (won't override shell env)
+    
+    let mode_str = std::env::var("LOAD_TEST_MODE").unwrap_or_else(|_| "individual".to_string());
+    let mode = match mode_str.to_lowercase().as_str() {
+        "batch" => TestMode::Batch,
+        "individual" => TestMode::Individual,
+        _ => panic!("LOAD_TEST_MODE must be 'individual' or 'batch'"),
+    };
+
     Config {
         database_url: std::env::var("LOAD_TEST_DATABASE_URL").expect(
             "LOAD_TEST_DATABASE_URL must be set.\n\
              Example: postgresql://postgres:postgres@127.0.0.1:54322/postgres",
         ),
+        mode,
         total_requests: std::env::var("LOAD_TEST_REQUESTS")
             .unwrap_or_else(|_| "100".to_string())
             .parse()
@@ -145,10 +163,10 @@ async fn main() {
         .try_init();
 
     let config = parse_config();
-
     println!("╔══════════════════════════════════════════╗");
     println!("║   Matchmaker Orchestrator  Load Test     ║");
     println!("╠══════════════════════════════════════════╣");
+    println!("  Mode:             {:?}", config.mode);
     println!("  Requests:         {}", config.total_requests);
     println!("  HTTP concurrency: {}", config.http_concurrency);
     println!("  Task concurrency: {} (AppState semaphore)", config.task_concurrency);
@@ -163,21 +181,38 @@ async fn main() {
     println!("OK");
 
     // ── 2. Mock Storage ──────────────────────────────────────────────────────
-    // Seed ONE PDF under TEST_PDF_KEY. All N upload rows reference this key,
-    // and MockStorageProvider will return the same bytes for each get_object.
     let storage = Arc::new(MockStorageProvider::new());
-    let pdf_bytes = std::fs::read("archive.zip-resumes/Alex_Rivera_CV.pdf")
-        .expect("Test PDF not found. Run from the project root directory.");
-    storage
-        .put_object(
-            "resumes",
-            TEST_PDF_KEY,
-            pdf_bytes,
-            None::<std::collections::HashMap<String, String>>,
-        )
-        .await
-        .expect("Failed to seed mock storage");
-    println!("Mock storage seeded with test PDF ({}).", TEST_PDF_KEY);
+    
+    match config.mode {
+        TestMode::Individual => {
+            let pdf_bytes = std::fs::read("archive.zip-resumes/Alex_Rivera_CV.pdf")
+                .expect("Test PDF not found. Run from the project root directory.");
+            storage
+                .put_object(
+                    "resumes",
+                    TEST_PDF_KEY,
+                    pdf_bytes,
+                    None::<std::collections::HashMap<String, String>>,
+                )
+                .await
+                .expect("Failed to seed mock storage");
+            println!("Mock storage seeded with test PDF ({}).", TEST_PDF_KEY);
+        }
+        TestMode::Batch => {
+            let zip_bytes = std::fs::read("Archive.zip")
+                .expect("Test ZIP not found. Run from the project root directory.");
+            storage
+                .put_object(
+                    "zip-archives",
+                    TEST_ZIP_KEY,
+                    zip_bytes,
+                    None::<std::collections::HashMap<String, String>>,
+                )
+                .await
+                .expect("Failed to seed mock storage");
+            println!("Mock storage seeded with test ZIP ({}).", TEST_ZIP_KEY);
+        }
+    }
 
     // ── 3. Wiremock OpenAI Stub ──────────────────────────────────────────────
     let mock_server = MockServer::start().await;
@@ -215,6 +250,7 @@ async fn main() {
 
     let app = Router::new()
         .route("/ingest/interns/individual", post(handle_single_upload))
+        .route("/ingest/interns/batch", post(matchmaker_orchestrator::requests::handle_batch_upload))
         .route_layer(axum::middleware::from_fn_with_state(
             app_state.clone(),
             auth::auth,
@@ -227,26 +263,37 @@ async fn main() {
             .expect("Axum server crashed");
     });
 
-    // ── 5. Pre-insert resume_upload rows ─────────────────────────────────────
+    // ── 5. Pre-insert db upload rows ─────────────────────────────────────────
     // Each HTTP request references a pre-existing row via its UUID.
     let upload_ids: Vec<Uuid> = (0..config.total_requests)
         .map(|_| Uuid::new_v4())
         .collect();
 
+    let table_name = match config.mode {
+        TestMode::Individual => "resume_uploads",
+        TestMode::Batch => "zip_archives",
+    };
+    let test_file_key = match config.mode {
+        TestMode::Individual => TEST_PDF_KEY,
+        TestMode::Batch => TEST_ZIP_KEY,
+    };
+
     print!(
-        "Inserting {} resume_upload rows... ",
-        config.total_requests
+        "Inserting {} {} rows... ",
+        config.total_requests, table_name
     );
     std::io::stdout().flush().ok();
     for &id in &upload_ids {
-        sqlx::query(
-            "INSERT INTO resume_uploads (id, filename, status) VALUES ($1, $2, 'pending')",
-        )
+        let query = format!(
+            "INSERT INTO {} (id, filename, status) VALUES ($1, $2, 'pending')",
+            table_name
+        );
+        sqlx::query(&query)
         .bind(id)
-        .bind(TEST_PDF_KEY)
+        .bind(test_file_key)
         .execute(&pool)
         .await
-        .expect("Failed to insert resume_upload row");
+        .unwrap_or_else(|e| panic!("Failed to insert {} row: {}", table_name, e));
     }
     println!("done.");
 
@@ -254,7 +301,12 @@ async fn main() {
     let token = make_jwt(&config.jwt_secret);
     let http_client = reqwest::Client::new();
     let http_sem = Arc::new(Semaphore::new(config.http_concurrency));
-    let endpoint = format!("http://{}/ingest/interns/individual", server_addr);
+    
+    let endpoint_path = match config.mode {
+        TestMode::Individual => "/ingest/interns/individual",
+        TestMode::Batch => "/ingest/interns/batch",
+    };
+    let endpoint = format!("http://{}{}", server_addr, endpoint_path);
 
     println!(
         "Firing {} requests (http_concurrency={})...",
@@ -277,7 +329,7 @@ async fn main() {
             let payload = json!({
                 "record": {
                     "id": upload_id,
-                    "filename": TEST_PDF_KEY
+                    "filename": test_file_key
                 }
             });
 
@@ -359,15 +411,17 @@ async fn main() {
         let ids: Vec<Uuid> = pending.keys().cloned().collect();
 
         // Single query for all pending IDs that are now terminal
-        let rows = sqlx::query(
+        let query = format!(
             "SELECT id, status::text AS status \
-             FROM resume_uploads \
+             FROM {} \
              WHERE id = ANY($1) AND status IN ('completed', 'failed')",
-        )
+            table_name
+        );
+        let rows = sqlx::query(&query)
         .bind(&ids)
         .fetch_all(&pool)
         .await
-        .expect("Failed to poll resume_uploads");
+        .unwrap_or_else(|_e| panic!("Failed to poll {}", table_name));
 
         for row in rows {
             let id: Uuid = row.get("id");
@@ -449,18 +503,31 @@ async fn main() {
     print!("Cleaning up test data... ");
     std::io::stdout().flush().ok();
 
-    // Resumes created by background tasks that completed successfully
-    sqlx::query("DELETE FROM resumes WHERE upload_id = ANY($1)")
-        .bind(&upload_ids)
-        .execute(&pool)
-        .await
-        .expect("Cleanup failed: resumes");
+    match config.mode {
+        TestMode::Individual => {
+            sqlx::query("DELETE FROM resumes WHERE upload_id = ANY($1)")
+                .bind(&upload_ids)
+                .execute(&pool)
+                .await
+                .expect("Cleanup failed: resumes");
 
-    sqlx::query("DELETE FROM resume_uploads WHERE id = ANY($1)")
-        .bind(&upload_ids)
-        .execute(&pool)
-        .await
-        .expect("Cleanup failed: resume_uploads");
+            sqlx::query("DELETE FROM resume_uploads WHERE id = ANY($1)")
+                .bind(&upload_ids)
+                .execute(&pool)
+                .await
+                .expect("Cleanup failed: resume_uploads");
+        }
+        TestMode::Batch => {
+            // Note: Batch extraction doesn't create SQL `resumes` records itself,
+            // it only puts extracted PDFs into storage (which is MockStorage here).
+            // It only creates and completes a `zip_archives` record.
+            sqlx::query("DELETE FROM zip_archives WHERE id = ANY($1)")
+                .bind(&upload_ids)
+                .execute(&pool)
+                .await
+                .expect("Cleanup failed: zip_archives");
+        }
+    }
 
     println!("done.");
     println!("╚══════════════════════════════════════════╝");
