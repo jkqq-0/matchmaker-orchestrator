@@ -34,12 +34,11 @@ async fn setup_test_env() -> TestEnv {
         .with_max_level(tracing::Level::DEBUG)
         .try_init();
 
-    let pool =
-        sqlx::postgres::PgPoolOptions::new()
-            .max_connections(2)
-            .connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"))
-            .await
-            .unwrap();
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"))
+        .await
+        .unwrap();
     let storage = Arc::new(MockStorageProvider::new());
     let jwt_secret = "test-secret".to_string();
 
