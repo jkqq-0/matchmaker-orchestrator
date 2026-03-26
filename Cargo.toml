@@ -1,8 +1,8 @@
 [package]
 name = "matchmaker-orchestrator"
-version = "0.2.1"
+version = "0.3.0"
 edition = "2024"
-repository = "https://github.com/GVLocke/matchmaker-orchestrator"
+repository = "https://github.com/jkqq-0/matchmaker-orchestrator"
 
 [dependencies]
 axum = { version = "0.8.8", features = ["http2", "macros", "ws"] }
