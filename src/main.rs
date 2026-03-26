@@ -29,7 +29,8 @@ async fn main() {
         .parse::<usize>()
         .expect("MAX_CONCURRENT_TASKS must be a number");
 
-    let s3_config_parsed = matchmaker_orchestrator::config::parse_s3_config(&endpoint).expect("Failed to parse S3 config from endpoint");
+    let s3_config_parsed = matchmaker_orchestrator::config::parse_s3_config(&endpoint)
+        .expect("Failed to parse S3 config from endpoint");
     let s3_endpoint = s3_config_parsed.endpoint;
     let project_ref = s3_config_parsed.project_ref;
 

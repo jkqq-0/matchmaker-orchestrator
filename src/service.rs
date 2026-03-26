@@ -18,7 +18,6 @@ pub enum DocumentStatus {
 #[derive(Debug, sqlx::Type, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
 #[sqlx(type_name = "job_status", rename_all = "lowercase")]
 pub enum JobStatus {
-
     Pending,
     Processing,
     Ready,
@@ -144,7 +143,12 @@ impl ResumeService {
         }
 
         // Download
-        let pdf_data = match self.state.storage.get_object("resumes", &filename, Some(MAX_PDF_SIZE)).await {
+        let pdf_data = match self
+            .state
+            .storage
+            .get_object("resumes", &filename, Some(MAX_PDF_SIZE))
+            .await
+        {
             Ok(data) => data,
             Err(e) => {
                 let err_msg = format!("Failed to download pdf: {}", e);
@@ -473,9 +477,14 @@ impl ResumeService {
 
             extracted_files_count += 1;
             if extracted_files_count > MAX_ZIP_FILES {
-                let err_msg = format!("Zip bomb detected: Exceeded max file count of {}", MAX_ZIP_FILES);
+                let err_msg = format!(
+                    "Zip bomb detected: Exceeded max file count of {}",
+                    MAX_ZIP_FILES
+                );
                 tracing::error!("{}", err_msg);
-                let _ = self.update_zip_status(id, DocumentStatus::Failed, Some(err_msg)).await;
+                let _ = self
+                    .update_zip_status(id, DocumentStatus::Failed, Some(err_msg))
+                    .await;
                 return;
             }
 
@@ -483,14 +492,22 @@ impl ResumeService {
             total_extracted_size = total_extracted_size.saturating_add(uncompressed_size);
 
             if total_extracted_size > MAX_UNCOMPRESSED_TOTAL_SIZE {
-                let err_msg = format!("Zip bomb detected: Exceeded max uncompressed size of {} bytes", MAX_UNCOMPRESSED_TOTAL_SIZE);
+                let err_msg = format!(
+                    "Zip bomb detected: Exceeded max uncompressed size of {} bytes",
+                    MAX_UNCOMPRESSED_TOTAL_SIZE
+                );
                 tracing::error!("{}", err_msg);
-                let _ = self.update_zip_status(id, DocumentStatus::Failed, Some(err_msg)).await;
+                let _ = self
+                    .update_zip_status(id, DocumentStatus::Failed, Some(err_msg))
+                    .await;
                 return;
             }
 
             if uncompressed_size > MAX_PDF_SIZE as u64 {
-                tracing::warn!("Skipping file {} inside zip because it exceeds MAX_PDF_SIZE", file.name());
+                tracing::warn!(
+                    "Skipping file {} inside zip because it exceeds MAX_PDF_SIZE",
+                    file.name()
+                );
                 continue;
             }
 
@@ -720,17 +737,15 @@ impl ProjectService {
     }
 
     pub fn parse_csv(data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
-        let mut rdr = ReaderBuilder::new()
-            .has_headers(true)
-            .from_reader(data);
-        
+        let mut rdr = ReaderBuilder::new().has_headers(true).from_reader(data);
+
         // Normalize headers to lowercase
         let headers = rdr.headers()?.clone();
         let mut new_headers = csv::StringRecord::new();
         for h in headers.iter() {
             new_headers.push_field(&h.to_lowercase());
         }
-        
+
         // Set the normalized headers back into the reader
         rdr.set_headers(new_headers);
 
@@ -741,7 +756,6 @@ impl ProjectService {
         }
         Ok(projects)
     }
-
 
     pub fn parse_excel(data: &[u8]) -> anyhow::Result<Vec<ProjectData>> {
         let cursor = Cursor::new(data);
@@ -810,7 +824,7 @@ impl ProjectService {
         }
 
         let mut query_builder: sqlx::QueryBuilder<sqlx::Postgres> = sqlx::QueryBuilder::new(
-            "INSERT INTO projects (upload_id, title, description, requirements, manager, deadline, priority, intern_cap, term) "
+            "INSERT INTO projects (upload_id, title, description, requirements, manager, deadline, priority, intern_cap, term) ",
         );
 
         query_builder.push_values(projects, |mut b, p| {
@@ -930,17 +944,20 @@ mod tests {
         // Test with mix of different aliases and casing
         let csv_data = b"PROJECT NAME,about,SKILLS,Lead,due date,priority,interns\nAlias Project,About Alias,Req Alias,Lead Alias,2026-03-03,5,10";
         let result = ProjectService::parse_csv(csv_data).unwrap();
-        
+
         assert_eq!(result.len(), 1);
-        assert_eq!(result[0], ProjectData {
-            title: "Alias Project".to_string(),
-            description: "About Alias".to_string(),
-            requirements: "Req Alias".to_string(),
-            manager: "Lead Alias".to_string(),
-            deadline: "2026-03-03".to_string(),
-            priority: 5,
-            intern_cap: 10,
-        });
+        assert_eq!(
+            result[0],
+            ProjectData {
+                title: "Alias Project".to_string(),
+                description: "About Alias".to_string(),
+                requirements: "Req Alias".to_string(),
+                manager: "Lead Alias".to_string(),
+                deadline: "2026-03-03".to_string(),
+                priority: 5,
+                intern_cap: 10,
+            }
+        );
     }
 
     #[test]
