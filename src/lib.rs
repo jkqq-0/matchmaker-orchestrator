@@ -1,8 +1,8 @@
 pub mod auth;
+pub mod config;
 pub mod requests;
 pub mod service;
 pub mod storage;
-pub mod config;
 
 use crate::storage::StorageProvider;
 use serde_json::Value;
