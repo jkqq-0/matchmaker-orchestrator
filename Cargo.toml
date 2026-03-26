@@ -37,3 +37,7 @@ lto = "thin"
 [dev-dependencies]
 tower = { version = "0.5.3", features = ["util"] }
 wiremock = "0.6.5"
+
+[[example]]
+name = "load_test"
+path = "examples/load_test.rs"
