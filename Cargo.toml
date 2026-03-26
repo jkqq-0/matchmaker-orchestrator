@@ -41,6 +41,3 @@ wiremock = "0.6.5"
 [[example]]
 name = "load_test"
 path = "examples/load_test.rs"
-
-[workspace.metadata.dist]
-allow-dirty = ["ci"]
