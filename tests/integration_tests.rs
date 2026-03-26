@@ -392,3 +392,57 @@ async fn test_zip_filtering_chaos() {
     }
     sqlx::query!("DELETE FROM zip_archives WHERE id = $1", zip_id).execute(&env.pool).await.unwrap();
 }
+
+#[tokio::test]
+async fn test_file_size_limit_exceeded() {
+    let env = setup_test_env().await;
+    let pdf_bytes = vec![0u8; 11 * 1024 * 1024]; // 11MB
+    env.storage.put_object("resumes", "huge.pdf", pdf_bytes, None).await.unwrap();
+
+    let upload_id = Uuid::new_v4();
+    sqlx::query!("INSERT INTO resume_uploads (id, filename, status) VALUES ($1, $2, 'pending')", upload_id, "huge.pdf").execute(&env.pool).await.unwrap();
+
+    let token = create_jwt(&env.jwt_secret);
+    let payload = json!({ "record": { "id": upload_id, "filename": "huge.pdf" } });
+    let res = env.app.oneshot(Request::builder().method("POST").uri("/ingest/interns/individual").header("Authorization", format!("Bearer {}", token)).header("Content-Type", "application/json").body(Body::from(serde_json::to_vec(&payload).unwrap())).unwrap()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+
+    let mut success = false;
+    for _ in 0..10 {
+        let rec = sqlx::query_as::<_, (DocumentStatus,)>("SELECT status FROM resume_uploads WHERE id = $1").bind(upload_id).fetch_one(&env.pool).await.unwrap();
+        if matches!(rec.0, DocumentStatus::Failed) { success = true; break; }
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+    assert!(success, "Large file should have failed");
+}
+
+#[tokio::test]
+async fn test_zip_bomb_protection() {
+    let env = setup_test_env().await;
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let options = zip::write::SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+        for i in 0..505 {
+            zip.start_file(format!("file{}.pdf", i), options).unwrap();
+            zip.write_all(b"%PDF-1.4 ignored bytes").unwrap();
+        }
+        zip.finish().unwrap();
+    }
+    let zip_id = Uuid::new_v4();
+    env.storage.put_object("zip-archives", "bomb.zip", buf, None).await.unwrap();
+    sqlx::query!("INSERT INTO zip_archives (id, filename, status) VALUES ($1, $2, 'pending')", zip_id, "bomb.zip").execute(&env.pool).await.unwrap();
+
+    let token = create_jwt(&env.jwt_secret);
+    let payload = json!({ "record": { "id": zip_id, "filename": "bomb.zip" } });
+    let res = env.app.oneshot(Request::builder().method("POST").uri("/ingest/interns/batch").header("Authorization", format!("Bearer {}", token)).header("Content-Type", "application/json").body(Body::from(serde_json::to_vec(&payload).unwrap())).unwrap()).await.unwrap();
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+
+    let mut success = false;
+    for _ in 0..30 {
+        let rec = sqlx::query_as::<_, (DocumentStatus,)>("SELECT status FROM zip_archives WHERE id = $1").bind(zip_id).fetch_one(&env.pool).await.unwrap();
+        if matches!(rec.0, DocumentStatus::Failed) { success = true; break; }
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+    assert!(success, "Zip bomb should have failed");
+}

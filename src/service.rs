@@ -27,6 +27,11 @@ pub enum JobStatus {
     Failed,
 }
 
+const MAX_PDF_SIZE: usize = 10 * 1024 * 1024; // 10 MB
+const MAX_ZIP_ARCHIVE_SIZE: usize = 50 * 1024 * 1024; // 50 MB
+const MAX_UNCOMPRESSED_TOTAL_SIZE: u64 = 100 * 1024 * 1024; // 100 MB
+const MAX_ZIP_FILES: usize = 500;
+
 pub struct ResumeService {
     state: AppState,
 }
@@ -139,7 +144,7 @@ impl ResumeService {
         }
 
         // Download
-        let pdf_data = match self.state.storage.get_object("resumes", &filename).await {
+        let pdf_data = match self.state.storage.get_object("resumes", &filename, Some(MAX_PDF_SIZE)).await {
             Ok(data) => data,
             Err(e) => {
                 let err_msg = format!("Failed to download pdf: {}", e);
@@ -398,7 +403,7 @@ impl ResumeService {
         let zip_data = match self
             .state
             .storage
-            .get_object("zip-archives", &filename)
+            .get_object("zip-archives", &filename, Some(MAX_ZIP_ARCHIVE_SIZE))
             .await
         {
             Ok(data) => data,
@@ -446,9 +451,13 @@ impl ResumeService {
         };
 
         tracing::info!(
-            "Successfully extracted zip archive with {} files",
+            "Successfully opened zip archive with {} files",
             archive.len()
         );
+
+        let mut extracted_files_count = 0;
+        let mut total_extracted_size: u64 = 0;
+
         for i in 0..archive.len() {
             let mut file = match archive.by_index(i) {
                 Ok(f) => f,
@@ -462,7 +471,31 @@ impl ResumeService {
                 continue;
             }
 
-            let mut pdf_buffer = Vec::new();
+            extracted_files_count += 1;
+            if extracted_files_count > MAX_ZIP_FILES {
+                let err_msg = format!("Zip bomb detected: Exceeded max file count of {}", MAX_ZIP_FILES);
+                tracing::error!("{}", err_msg);
+                let _ = self.update_zip_status(id, DocumentStatus::Failed, Some(err_msg)).await;
+                return;
+            }
+
+            let uncompressed_size = file.size();
+            total_extracted_size = total_extracted_size.saturating_add(uncompressed_size);
+
+            if total_extracted_size > MAX_UNCOMPRESSED_TOTAL_SIZE {
+                let err_msg = format!("Zip bomb detected: Exceeded max uncompressed size of {} bytes", MAX_UNCOMPRESSED_TOTAL_SIZE);
+                tracing::error!("{}", err_msg);
+                let _ = self.update_zip_status(id, DocumentStatus::Failed, Some(err_msg)).await;
+                return;
+            }
+
+            if uncompressed_size > MAX_PDF_SIZE as u64 {
+                tracing::warn!("Skipping file {} inside zip because it exceeds MAX_PDF_SIZE", file.name());
+                continue;
+            }
+
+            // Read the decompressed file safely since size is bounded
+            let mut pdf_buffer = Vec::with_capacity(uncompressed_size as usize);
             if let Err(e) = file.read_to_end(&mut pdf_buffer) {
                 tracing::error!("Failed to read file {} to buffer: {}", file.name(), e);
                 continue;
@@ -620,7 +653,7 @@ impl ProjectService {
         let data = match self
             .state
             .storage
-            .get_object("project-spreadsheets", &filename)
+            .get_object("project-spreadsheets", &filename, None)
             .await
         {
             Ok(data) => data,
