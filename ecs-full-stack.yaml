@@ -191,7 +191,7 @@ Resources:
       Protocol: HTTP
       TargetType: ip
       HealthCheckIntervalSeconds: 30
-      HealthCheckPath: /hello-world # Or point to a specific /health endpoint on your API
+      HealthCheckPath: /health
       HealthCheckTimeoutSeconds: 5
       HealthyThresholdCount: 2
       UnhealthyThresholdCount: 2
