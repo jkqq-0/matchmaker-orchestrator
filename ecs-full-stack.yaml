@@ -17,6 +17,16 @@ Parameters:
     Description: Number of Fargate tasks to run
     Type: Number
     Default: 1
+  # --- DNS and SSL Configuration ---
+  DomainName:
+    Description: The apex domain you registered in Route 53 (e.g., yourdomain.com)
+    Type: String
+  HostedZoneId:
+    Description: The Route 53 Hosted Zone ID for your domain
+    Type: String
+  AcmCertificateArn:
+    Description: The ARN of the SSL Certificate in AWS Certificate Manager for api.yourdomain.com
+    Type: String
   # --- App Environment Variables ---
   AppSecretArn:
     Description: The ARN of the secret in AWS Secrets Manager containing app credentials
@@ -148,6 +158,10 @@ Resources:
           FromPort: 80
           ToPort: 80
           CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
 
   ECSSecurityGroup:
     Type: AWS::EC2::SecurityGroup
@@ -186,11 +200,40 @@ Resources:
     Type: AWS::ElasticLoadBalancingV2::Listener
     Properties:
       DefaultActions:
-        - Type: forward
-          TargetGroupArn: !Ref TargetGroup
+        - Type: redirect
+          RedirectConfig:
+            Protocol: HTTPS
+            Port: "443"
+            StatusCode: HTTP_301
       LoadBalancerArn: !Ref LoadBalancer
       Port: 80
       Protocol: HTTP
+
+  HTTPSListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+      LoadBalancerArn: !Ref LoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates:
+        - CertificateArn: !Ref AcmCertificateArn
+
+  # =========================================================================
+  # 4. ROUTE 53 DNS (Custom Domain)
+  # =========================================================================
+  ApiDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub api.${DomainName}.
+      Type: A
+      AliasTarget:
+        DNSName: !GetAtt LoadBalancer.DNSName
+        HostedZoneId: !GetAtt LoadBalancer.CanonicalHostedZoneID
+        EvaluateTargetHealth: true
 
   # =========================================================================
   # 4. ECS FARGATE CLUSTER & SERVICE
@@ -272,7 +315,7 @@ Resources:
   ECSService:
     Type: AWS::ECS::Service
     DependsOn: 
-      - Listener
+      - HTTPSListener
       - DefaultPrivateRoute
     Properties:
       ServiceName: !Sub ${EnvironmentName}-service
@@ -292,5 +335,5 @@ Resources:
 
 Outputs:
   ApiUrl:
-    Description: The public HTTP URL of your API
-    Value: !Sub "http://${LoadBalancer.DNSName}"
+    Description: The public HTTPS URL of your API
+    Value: !Sub https://api.${DomainName}
