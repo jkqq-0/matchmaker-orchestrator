@@ -1,0 +1,17 @@
+target/
+.git/
+.github/
+.vscode/
+
+# Ignore test directories and examples
+tests/
+examples/
+test-project-sheets/
+
+# Data files and markdown
+*.md
+*.zip
+.env
+
+# Supabase local environment
+supabase/
