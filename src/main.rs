@@ -1,8 +1,8 @@
 use aws_config::Region;
 use aws_sdk_s3::Client as S3Client;
-use axum::{Router, routing::get, routing::post};
+use axum::{extract::State, http::StatusCode, Json, Router, routing::get, routing::post};
 use dotenvy::dotenv;
-use serde_json::Value;
+use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::sync::Arc;
@@ -110,6 +110,7 @@ async fn main() {
     // Create the axum router
     let app = Router::new()
         .merge(protected_routes)
+        .route("/health", get(health_check))
         .route("/hello-world", get(hello_world))
         .layer(
             TraceLayer::new_for_http()
@@ -134,4 +135,23 @@ async fn main() {
 async fn hello_world() -> &'static str {
     tracing::info!("hello-world handler accessed");
     "Hello, World!"
+}
+
+async fn health_check(State(state): State<AppState>) -> (StatusCode, Json<Value>) {
+    // Ping the database to ensure connection pool is alive and database is reachable
+    let db_healthy = sqlx::query("SELECT 1").execute(&state.pool).await.is_ok();
+
+    let status_code = if db_healthy {
+        StatusCode::OK
+    } else {
+        StatusCode::SERVICE_UNAVAILABLE
+    };
+
+    let response = json!({
+        "status": if db_healthy { "ok" } else { "unavailable" },
+        "database": if db_healthy { "connected" } else { "disconnected" },
+        "version": env!("CARGO_PKG_VERSION"),
+    });
+
+    (status_code, Json(response))
 }
