@@ -1,0 +1,56 @@
+name: Toggle API Backend Compute
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Set Backend Power State:'
+        required: true
+        type: choice
+        options:
+          - 'Turn ON (1 Task)'
+          - 'Turn OFF (0 Tasks)'
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  # CHANGE THESE if your CloudFormation names differ!
+  AWS_REGION: us-east-1
+  ECS_CLUSTER: matchmaker-prod-cluster
+  ECS_SERVICE: matchmaker-prod-service
+  COUNT: 0
+
+jobs:
+  toggle-compute:
+    runs-on: ubuntu-latest
+    steps:
+      # Connect securely to AWS without static keys (using the same OIDC setup as deployment)
+      # Or, replace with AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY if you aren't using OIDC.
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::476114126292:role/GitHubActionsECRRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Calculate Desired Count
+        id: calculate
+        run: |
+          if [ "${{ github.event.inputs.action }}" == "Turn ON (1 Task)" ]; then
+            echo "COUNT=1" >> $GITHUB_ENV
+          else
+            echo "COUNT=0" >> $GITHUB_ENV
+          fi
+
+      - name: Scale ECS Service
+        run: |
+          echo "Sending command to scale ${{ env.ECS_SERVICE }} to ${{ env.COUNT }} containers..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --desired-count ${{ env.COUNT }} \
+            --region ${{ env.AWS_REGION }} \
+            > /dev/null
+          
+          echo "✅ Successfully updated ECS to scale to ${{ env.COUNT }} container(s)!"
