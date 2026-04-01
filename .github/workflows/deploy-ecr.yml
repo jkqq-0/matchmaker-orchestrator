@@ -15,6 +15,8 @@ env:
   # CHANGE THESE to match your AWS account details!
   AWS_REGION: us-east-1
   ECR_REPOSITORY: matchmaker-orchestrator
+  ECS_CLUSTER: matchmaker-prod-cluster
+  ECS_SERVICE: matchmaker-prod-service
 
 jobs:
   build-and-push:
@@ -52,3 +54,21 @@ jobs:
           # Push both tags (the specific version, and the rolling latest version) to AWS
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+      - name: Configure AWS credentials for ECS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::476114126292:role/GithubActionsECSRole
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Force ECS new deployment
+        run: |
+          echo "Triggering a new deployment for ECS service..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            > /dev/null
+          
+          echo "✅ Successfully triggered a new deployment for the ECS service!"
+          echo "Next time a task is provisioned (or right now, if desired count > 0), it will use the newly pushed image."
