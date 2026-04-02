@@ -58,7 +58,7 @@ jobs:
       - name: Configure AWS credentials for ECS
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::476114126292:role/GithubActionsECSRole
+          role-to-assume: arn:aws:iam::476114126292:role/GitHubActionsECRRole
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Force ECS new deployment
