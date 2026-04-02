@@ -1,8 +1,8 @@
 use aws_config::Region;
 use aws_sdk_s3::Client as S3Client;
-use axum::{extract::State, http::StatusCode, Json, Router, routing::get, routing::post};
+use axum::{Json, Router, extract::State, http::StatusCode, routing::get, routing::post};
 use dotenvy::dotenv;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use sqlx::postgres::PgPoolOptions;
 use std::env;
 use std::sync::Arc;
@@ -42,10 +42,18 @@ async fn main() {
     let resume_schema: Value =
         serde_json::from_str(raw_schema_string).expect("Invalid JSON Schema File");
 
-    tracing_subscriber::fmt()
-        .with_target(false)
-        .compact() // Use .json() here for production!
-        .init();
+    let app_env = env::var("APP_ENV").unwrap_or_else(|_| "production".to_string());
+    if app_env == "development" || app_env == "local" {
+        tracing_subscriber::fmt()
+            .with_target(false)
+            .compact()
+            .init();
+    } else {
+        tracing_subscriber::fmt()
+            .with_target(false)
+            .json()
+            .init();
+    }
 
     let s3_access_key = env::var("S3_ACCESS_KEY").unwrap_or_else(|_| project_ref.clone());
     let s3_secret_key = env::var("S3_SECRET_KEY").unwrap_or_else(|_| service_key.clone());
