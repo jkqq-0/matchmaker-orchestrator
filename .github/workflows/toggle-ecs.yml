@@ -31,7 +31,7 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::476114126292:role/GithubActionsECSRole
+          role-to-assume: arn:aws:iam::476114126292:role/ECSToggleRole
           aws-region: ${{ env.AWS_REGION }}
 
       - name: Calculate Desired Count
