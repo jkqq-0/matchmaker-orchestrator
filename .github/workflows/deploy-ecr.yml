@@ -55,11 +55,7 @@ jobs:
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
 
-      - name: Configure AWS credentials for ECS
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: arn:aws:iam::476114126292:role/GitHubActionsECRRole
-          aws-region: ${{ env.AWS_REGION }}
+
 
       - name: Force ECS new deployment
         run: |
