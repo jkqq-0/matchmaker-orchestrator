@@ -1,6 +1,6 @@
 [package]
 name = "matchmaker-orchestrator"
-version = "0.3.3-ci.1"
+version = "0.4.0"
 edition = "2024"
 repository = "https://github.com/jkqq-0/matchmaker-orchestrator"
 
@@ -12,6 +12,10 @@ serde = { version = "1.0.228", features = ["derive"] }
 tokio = { version = "1.49.0", features = ["full"] }
 serde_json = "1.0.149"
 reqwest = { version = "0.13.1", features = ["json"] }
+regex = "1.10"
+lazy_static = "1.4"
+rust-bert = { version = "0.22", optional = true }
+console = "0.16.3"
 tracing = "0.1.44"
 tracing-subscriber = {version = "0.3.22", features = ["env-filter", "json"]}
 tower-http = {version = "0.6.8", features = ["trace"]}
@@ -41,3 +45,12 @@ wiremock = "0.6.5"
 [[example]]
 name = "load_test"
 path = "examples/load_test.rs"
+
+[[example]]
+name = "download_model"
+path = "examples/download_model.rs"
+required-features = ["ml"]
+
+[features]
+default = []
+ml = ["dep:rust-bert"]

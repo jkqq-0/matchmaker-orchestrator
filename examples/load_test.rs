@@ -254,6 +254,9 @@ async fn main() {
         openai_api_key: "load-test-key".to_string(),
         openai_endpoint: mock_server.uri(),
         resume_schema: json!({}),
+        ner_engine: Arc::new(std::sync::Mutex::new(
+            matchmaker_orchestrator::pii_scrubber::NerEngine::new().unwrap()
+        )),
         // This semaphore is the bottleneck we're testing. Set it lower than
         // http_concurrency to observe queuing/backpressure behavior.
         semaphore: Arc::new(Semaphore::new(config.task_concurrency)),

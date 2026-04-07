@@ -281,8 +281,17 @@ impl ResumeService {
             }
         };
 
+        let ner_engine = self.state.ner_engine.clone();
+        let pdf_text_to_scrub = pdf_text.clone();
+        let sanitized_text = tokio::task::spawn_blocking(move || {
+            let engine = ner_engine.lock().unwrap();
+            crate::pii_scrubber::scrub_text_sync(pdf_text_to_scrub, &engine)
+        })
+        .await
+        .unwrap_or(pdf_text.clone());
+
         let response = generate_structure_from_pdf(
-            &pdf_text,
+            &sanitized_text,
             &self.state.http_client,
             &self.state.openai_api_key,
             &self.state.openai_endpoint,
