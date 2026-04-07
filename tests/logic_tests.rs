@@ -19,6 +19,9 @@ async fn setup_app_state() -> AppState {
         openai_api_key: "test".to_string(),
         openai_endpoint: "test".to_string(),
         resume_schema: json!({}),
+        ner_engine: std::sync::Arc::new(std::sync::Mutex::new(
+            matchmaker_orchestrator::pii_scrubber::NerEngine::new().unwrap(),
+        )),
         semaphore: Arc::new(Semaphore::new(1)),
         jwt_secret: "test".to_string(),
     }

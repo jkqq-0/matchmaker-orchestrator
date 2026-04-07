@@ -79,7 +79,7 @@ async fn main() {
         .build();
 
     let s3_client = S3Client::from_conf(s3_config);
-    let storage = Arc::new(S3StorageProvider::new(s3_client));
+    let storage = Arc::new(S3StorageProvider::new(s3_client)) as Arc<dyn matchmaker_orchestrator::storage::StorageProvider>;
 
     let pool = PgPoolOptions::new()
         .max_connections((max_concurrent_tasks + 5) as u32)
@@ -95,6 +95,11 @@ async fn main() {
         .await
         .expect("Failed to get JWT Secret");
 
+    let ner_engine = Arc::new(std::sync::Mutex::new(
+        matchmaker_orchestrator::pii_scrubber::NerEngine::new()
+            .expect("Failed to initialize NER Engine")
+    ));
+
     let app_state = AppState {
         pool,
         storage,
@@ -104,6 +109,7 @@ async fn main() {
         resume_schema,
         semaphore,
         jwt_secret,
+        ner_engine,
     };
 
     let protected_routes = Router::new()

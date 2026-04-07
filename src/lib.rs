@@ -3,6 +3,7 @@ pub mod config;
 pub mod requests;
 pub mod service;
 pub mod storage;
+pub mod pii_scrubber;
 
 use crate::storage::StorageProvider;
 use serde_json::Value;
@@ -20,4 +21,5 @@ pub struct AppState {
     pub resume_schema: Value,
     pub semaphore: Arc<Semaphore>,
     pub jwt_secret: String,
+    pub ner_engine: Arc<std::sync::Mutex<crate::pii_scrubber::NerEngine>>,
 }

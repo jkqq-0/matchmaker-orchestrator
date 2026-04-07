@@ -5,7 +5,6 @@ target/
 
 # Ignore test directories and examples
 tests/
-examples/
 test-project-sheets/
 
 # Data files and markdown

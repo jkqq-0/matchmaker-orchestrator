@@ -49,6 +49,9 @@ async fn setup_test_env() -> TestEnv {
         openai_api_key: "test-key".to_string(),
         openai_endpoint: "http://localhost:1234".to_string(), // Default, tests can override
         resume_schema: json!({}),
+        ner_engine: std::sync::Arc::new(std::sync::Mutex::new(
+            matchmaker_orchestrator::pii_scrubber::NerEngine::new().unwrap(),
+        )),
         semaphore: Arc::new(Semaphore::new(10)),
         jwt_secret: jwt_secret.clone(),
     };
@@ -204,6 +207,9 @@ async fn test_resume_upload_flow() {
         openai_api_key: "test-key".to_string(),
         openai_endpoint: mock_server.uri(),
         resume_schema: json!({}),
+        ner_engine: std::sync::Arc::new(std::sync::Mutex::new(
+            matchmaker_orchestrator::pii_scrubber::NerEngine::new().unwrap(),
+        )),
         semaphore: Arc::new(Semaphore::new(10)),
         jwt_secret: env.jwt_secret.clone(),
     };
@@ -703,6 +709,9 @@ async fn test_prompt_injection_defense_verification() {
         openai_api_key: "test-key".to_string(),
         openai_endpoint: mock_server.uri(),
         resume_schema: json!({}),
+        ner_engine: std::sync::Arc::new(std::sync::Mutex::new(
+            matchmaker_orchestrator::pii_scrubber::NerEngine::new().unwrap(),
+        )),
         semaphore: std::sync::Arc::new(tokio::sync::Semaphore::new(10)),
         jwt_secret: env.jwt_secret.clone(),
     };
