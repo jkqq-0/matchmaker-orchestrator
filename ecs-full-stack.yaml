@@ -277,7 +277,7 @@ Resources:
     Properties:
       Family: !Sub ${EnvironmentName}-api-task
       Cpu: 256
-      Memory: 512
+      Memory: 2048
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
