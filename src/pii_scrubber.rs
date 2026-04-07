@@ -11,18 +11,34 @@ lazy_static! {
 
 pub struct NerEngine {
     #[cfg(feature = "ml")]
-    model: TokenClassificationModel,
+    model: std::sync::Mutex<TokenClassificationModel>,
 }
 
 impl NerEngine {
     pub fn new() -> anyhow::Result<Self> {
         #[cfg(feature = "ml")]
         {
-            use rust_bert::pipelines::token_classification::{TokenClassificationConfig, TokenClassificationModel};
-            
-            let config = TokenClassificationConfig::default();
+            use rust_bert::pipelines::common::{ModelType, ModelResource};
+            use rust_bert::resources::RemoteResource;
+
+            let mut config = TokenClassificationConfig::default();
+            config.model_type = ModelType::Bert;
+            config.model_resource = ModelResource::Torch(Box::new(RemoteResource::from_pretrained((
+                "dslim/bert-base", 
+                "https://huggingface.co/dslim/bert-base-NER/resolve/main/pytorch_model.bin"
+            ))));
+            config.config_resource = Box::new(RemoteResource::from_pretrained((
+                "dslim/bert-base", 
+                "https://huggingface.co/dslim/bert-base-NER/resolve/main/config.json"
+            )));
+            config.vocab_resource = Box::new(RemoteResource::from_pretrained((
+                "dslim/bert-base", 
+                "https://huggingface.co/dslim/bert-base-NER/resolve/main/vocab.txt"
+            )));
+            config.lower_case = false;
+
             let model = TokenClassificationModel::new(config)?;
-            Ok(Self { model })
+            Ok(Self { model: std::sync::Mutex::new(model) })
         }
         #[cfg(not(feature = "ml"))]
         {
@@ -33,8 +49,9 @@ impl NerEngine {
     pub fn scrub_entities(&self, text: &str) -> String {
         #[cfg(feature = "ml")]
         {
-            // rust-bert predict takes an array of text snippets
-            let predictions_list = self.model.predict(&[text], true, true);
+            // Lock the mutex to strictly serialize ML operations.
+            // This prevents concurrent memory allocations inside LibTorch!
+            let predictions_list = self.model.lock().unwrap().predict(&[text], true, true);
             
             let mut scrubbed_text = text.to_string();
             
