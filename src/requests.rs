@@ -1,7 +1,7 @@
 pub mod openai;
 
 use crate::AppState;
-use crate::service::{ProjectService, ResumeService};
+use crate::service::{JobStatus, ProjectService, ResumeService};
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
@@ -20,6 +20,7 @@ pub struct WebhookPayload {
 pub struct FileTrackingTableRecord {
     id: Uuid,
     filename: String,
+    job_id: Option<Uuid>,
 }
 
 pub async fn handle_single_upload(
@@ -28,7 +29,20 @@ pub async fn handle_single_upload(
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
     let id = payload.record.id;
+    let job_id = payload.record.job_id;
     tracing::info!("scrape handler accessed");
+
+    // Mark job as Processing immediately, before the background task acquires the semaphore.
+    if let Some(job_id) = job_id {
+        let _ = sqlx::query!(
+            "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
+            JobStatus::Processing as JobStatus,
+            job_id,
+            JobStatus::Pending as JobStatus
+        )
+        .execute(&state.pool)
+        .await;
+    }
 
     let service = ResumeService::new(state);
 
@@ -48,7 +62,20 @@ pub async fn handle_batch_upload(
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
     let id = payload.record.id;
+    let job_id = payload.record.job_id;
     tracing::info!("batch upload handler accessed");
+
+    // Mark job as Processing immediately, before the background task acquires the semaphore.
+    if let Some(job_id) = job_id {
+        let _ = sqlx::query!(
+            "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
+            JobStatus::Processing as JobStatus,
+            job_id,
+            JobStatus::Pending as JobStatus
+        )
+        .execute(&state.pool)
+        .await;
+    }
 
     let service = ResumeService::new(state);
 
@@ -68,7 +95,20 @@ pub async fn handle_project_upload(
 ) -> impl IntoResponse {
     let filename = payload.record.filename.clone();
     let id = payload.record.id;
+    let job_id = payload.record.job_id;
     tracing::info!("project upload handler accessed");
+
+    // Mark job as Processing immediately, before the background task acquires the semaphore.
+    if let Some(job_id) = job_id {
+        let _ = sqlx::query!(
+            "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
+            JobStatus::Processing as JobStatus,
+            job_id,
+            JobStatus::Pending as JobStatus
+        )
+        .execute(&state.pool)
+        .await;
+    }
 
     let service = ProjectService::new(state);
 

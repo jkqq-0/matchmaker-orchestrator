@@ -130,18 +130,6 @@ impl ResumeService {
             .update_resume_upload_status(upload_id, DocumentStatus::Processing, None)
             .await;
 
-        // Mark job as processing if it was pending
-        if let Some(job_id) = upload_record.job_id {
-            let _ = sqlx::query!(
-                "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
-                JobStatus::Processing as JobStatus,
-                job_id,
-                JobStatus::Pending as JobStatus
-            )
-            .execute(&self.state.pool)
-            .await;
-        }
-
         // Download
         let pdf_data = match self
             .state
@@ -400,18 +388,6 @@ impl ResumeService {
             .update_zip_status(id, DocumentStatus::Processing, None)
             .await;
 
-        // Mark job as processing
-        if let Some(job_id) = zip_record.job_id {
-            let _ = sqlx::query!(
-                "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
-                JobStatus::Processing as JobStatus,
-                job_id,
-                JobStatus::Pending as JobStatus
-            )
-            .execute(&self.state.pool)
-            .await;
-        }
-
         // Download
         let zip_data = match self
             .state
@@ -663,18 +639,6 @@ impl ProjectService {
         let _ = self
             .update_upload_status(id, DocumentStatus::Processing, None)
             .await;
-
-        // Mark job as processing
-        if let Some(job_id) = upload_record.job_id {
-            let _ = sqlx::query!(
-                "UPDATE jobs SET status = $1 WHERE id = $2 AND status = $3",
-                JobStatus::Processing as JobStatus,
-                job_id,
-                JobStatus::Pending as JobStatus
-            )
-            .execute(&self.state.pool)
-            .await;
-        }
 
         let data = match self
             .state
