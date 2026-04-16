@@ -78,7 +78,9 @@ impl ResumeService {
             r#"
             SELECT 
                 (SELECT count(*) FROM resume_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
-                (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed'))
+                (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
+                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
+                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status = 'completed' AND COALESCE(expected_files, 0) > (SELECT count(*) FROM resume_uploads WHERE zip_id = zip_archives.id))
             as count
             "#,
             job_id
@@ -362,6 +364,18 @@ impl ResumeService {
         Ok(())
     }
 
+    async fn set_zip_completed(&self, id: Uuid, expected_files: i32) -> Result<(), sqlx::Error> {
+        sqlx::query!(
+            "UPDATE zip_archives SET status = $1, expected_files = $2 WHERE id = $3",
+            DocumentStatus::Completed as DocumentStatus,
+            expected_files,
+            id
+        )
+        .execute(&self.state.pool)
+        .await?;
+        Ok(())
+    }
+
     pub async fn handle_batch_extraction(&self, id: Uuid, filename: String) {
         let _permit = self
             .state
@@ -542,7 +556,7 @@ impl ResumeService {
         }
 
         let _ = self
-            .update_zip_status(id, DocumentStatus::Completed, None)
+            .set_zip_completed(id, extracted_files_count as i32)
             .await;
 
         if let Some(job_id) = zip_record.job_id {
@@ -598,7 +612,9 @@ impl ProjectService {
             r#"
             SELECT 
                 (SELECT count(*) FROM resume_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
-                (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed'))
+                (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
+                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
+                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status = 'completed' AND COALESCE(expected_files, 0) > (SELECT count(*) FROM resume_uploads WHERE zip_id = zip_archives.id))
             as count
             "#,
             job_id

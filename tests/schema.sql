@@ -38,6 +38,7 @@ CREATE TABLE zip_archives (
     user_id uuid,
     job_id uuid,
     term text,
+    expected_files integer DEFAULT 0,
     created_at timestamp with time zone DEFAULT now()
 );
 

@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "UPDATE zip_archives SET status = $1, expected_files = $2 WHERE id = $3",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Left": [
+        {
+          "Custom": {
+            "name": "document_status",
+            "kind": {
+              "Enum": [
+                "pending",
+                "processing",
+                "completed",
+                "failed"
+              ]
+            }
+          }
+        },
+        "Int4",
+        "Uuid"
+      ]
+    },
+    "nullable": []
+  },
+  "hash": "dce7acdb7e7f79ab676e2424b2d227b8018602d91e56a8d1d8bfff3da2aedb53"
+}

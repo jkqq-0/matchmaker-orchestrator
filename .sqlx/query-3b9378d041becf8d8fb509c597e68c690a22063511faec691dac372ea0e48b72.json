@@ -1,0 +1,22 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n            SELECT \n                (SELECT count(*) FROM resume_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +\n                (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +\n                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +\n                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status = 'completed' AND COALESCE(expected_files, 0) > (SELECT count(*) FROM resume_uploads WHERE zip_id = zip_archives.id))\n            as count\n            ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "count",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Uuid"
+      ]
+    },
+    "nullable": [
+      null
+    ]
+  },
+  "hash": "3b9378d041becf8d8fb509c597e68c690a22063511faec691dac372ea0e48b72"
+}
