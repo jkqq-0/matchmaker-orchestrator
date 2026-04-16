@@ -78,7 +78,6 @@ impl ResumeService {
             r#"
             SELECT 
                 (SELECT count(*) FROM resume_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
-                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
                 (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed'))
             as count
             "#,
@@ -458,7 +457,8 @@ impl ResumeService {
 
             let path = std::path::Path::new(file.name());
             let is_macos_metadata = path.components().any(|c| c.as_os_str() == "__MACOSX");
-            let is_hidden = path.file_name()
+            let is_hidden = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .map(|s| s.starts_with('.'))
                 .unwrap_or(false);
@@ -598,7 +598,6 @@ impl ProjectService {
             r#"
             SELECT 
                 (SELECT count(*) FROM resume_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
-                (SELECT count(*) FROM zip_archives WHERE job_id = $1 AND status NOT IN ('completed', 'failed')) +
                 (SELECT count(*) FROM project_uploads WHERE job_id = $1 AND status NOT IN ('completed', 'failed'))
             as count
             "#,
