@@ -42,6 +42,14 @@ pub async fn handle_single_upload(
         )
         .execute(&state.pool)
         .await;
+
+        let _ = sqlx::query!(
+            "UPDATE resume_uploads SET job_id = $1 WHERE id = $2",
+            job_id,
+            id
+        )
+        .execute(&state.pool)
+        .await;
     }
 
     let service = ResumeService::new(state);
@@ -75,6 +83,14 @@ pub async fn handle_batch_upload(
         )
         .execute(&state.pool)
         .await;
+
+        let _ = sqlx::query!(
+            "UPDATE zip_archives SET job_id = $1 WHERE id = $2",
+            job_id,
+            id
+        )
+        .execute(&state.pool)
+        .await;
     }
 
     let service = ResumeService::new(state);
@@ -105,6 +121,14 @@ pub async fn handle_project_upload(
             JobStatus::Processing as JobStatus,
             job_id,
             JobStatus::Pending as JobStatus
+        )
+        .execute(&state.pool)
+        .await;
+
+        let _ = sqlx::query!(
+            "UPDATE project_uploads SET job_id = $1 WHERE id = $2",
+            job_id,
+            id
         )
         .execute(&state.pool)
         .await;
