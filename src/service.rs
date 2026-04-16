@@ -456,7 +456,14 @@ impl ResumeService {
                 }
             };
 
-            if file.is_dir() || !file.name().ends_with(".pdf") || file.name().starts_with('.') {
+            let path = std::path::Path::new(file.name());
+            let is_macos_metadata = path.components().any(|c| c.as_os_str() == "__MACOSX");
+            let is_hidden = path.file_name()
+                .and_then(|n| n.to_str())
+                .map(|s| s.starts_with('.'))
+                .unwrap_or(false);
+
+            if file.is_dir() || !file.name().ends_with(".pdf") || is_macos_metadata || is_hidden {
                 continue;
             }
 

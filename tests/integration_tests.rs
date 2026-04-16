@@ -780,3 +780,112 @@ async fn test_prompt_injection_defense_verification() {
 
     // The success of the test implies the Wiremock assertion `SystemPromptHasDefenses` passed!
 }
+
+#[tokio::test]
+async fn test_zip_macos_metadata_filtering() {
+    let env = setup_test_env().await;
+
+    // Create ZIP with macOS metadata structure
+    let mut buf = Vec::new();
+    {
+        let mut zip = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
+        let options = zip::write::SimpleFileOptions::default()
+            .compression_method(zip::CompressionMethod::Deflated);
+
+        // Real file
+        zip.start_file("Alex_Rivera_CV.pdf", options).unwrap();
+        zip.write_all(b"%PDF-1.4").unwrap();
+
+        // macOS metadata directory file
+        zip.start_file("__MACOSX/._Alex_Rivera_CV.pdf", options).unwrap();
+        zip.write_all(b"macOS metadata").unwrap();
+
+        // macOS metadata deeply nested
+        zip.start_file("resumes/__MACOSX/test.pdf", options).unwrap();
+        zip.write_all(b"more metadata").unwrap();
+
+        // Hidden file
+        zip.start_file(".DS_Store", options).unwrap();
+        zip.write_all(b"binary data").unwrap();
+
+        // Hidden PDF file (should be ignored)
+        zip.start_file("folder/._hidden_resume.pdf", options).unwrap();
+        zip.write_all(b"not a real pdf").unwrap();
+
+        zip.finish().unwrap();
+    }
+
+    let zip_id = Uuid::new_v4();
+    env.storage
+        .put_object("zip-archives", "metadata_test.zip", buf, None)
+        .await
+        .unwrap();
+    
+    sqlx::query!(
+        "INSERT INTO zip_archives (id, filename, status) VALUES ($1, $2, 'pending')",
+        zip_id,
+        "metadata_test.zip"
+    )
+    .execute(&env.pool)
+    .await
+    .unwrap();
+
+    let payload = json!({ "record": { "id": zip_id, "filename": "metadata_test.zip" } });
+    let token = create_jwt(&env.jwt_secret);
+
+    let res = env
+        .app
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/ingest/interns/batch")
+                .header("Authorization", format!("Bearer {}", token))
+                .header("Content-Type", "application/json")
+                .body(Body::from(serde_json::to_vec(&payload).unwrap()))
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(res.status(), StatusCode::ACCEPTED);
+
+    // Poll for completion
+    let mut success = false;
+    for _ in 0..10 {
+        let rec =
+            sqlx::query_as::<_, (DocumentStatus,)>("SELECT status FROM zip_archives WHERE id = $1")
+                .bind(zip_id)
+                .fetch_one(&env.pool)
+                .await
+                .unwrap();
+        if matches!(rec.0, DocumentStatus::Completed) {
+            success = true;
+            break;
+        }
+        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+    }
+    assert!(success, "ZIP processing did not complete");
+
+    {
+        let objects = env.storage.objects.lock().unwrap();
+        
+        // Should have ONLY the real PDF
+        assert!(objects.contains_key("resumes/metadata_test.zip_Alex_Rivera_CV.pdf"));
+        
+        // Should NOT have any metadata or hidden files
+        assert!(!objects.contains_key("resumes/metadata_test.zip___MACOSX/._Alex_Rivera_CV.pdf"));
+        assert!(!objects.contains_key("resumes/metadata_test.zip_resumes/__MACOSX/test.pdf"));
+        assert!(!objects.contains_key("resumes/metadata_test.zip_.DS_Store"));
+        assert!(!objects.contains_key("resumes/metadata_test.zip_folder/._hidden_resume.pdf"));
+        
+        // Count should be exactly 1
+        let resumes_count = objects.keys().filter(|k| k.starts_with("resumes/metadata_test.zip_")).count();
+        assert_eq!(resumes_count, 1, "Only 1 file should have been extracted, but found {}", resumes_count);
+    }
+
+    // Cleanup
+    sqlx::query!("DELETE FROM zip_archives WHERE id = $1", zip_id)
+        .execute(&env.pool)
+        .await
+        .unwrap();
+}
